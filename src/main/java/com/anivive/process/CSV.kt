@@ -10,7 +10,7 @@ import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
 
-class CSV {
+object CSV {
 
     private val logger = Logger.getLogger(CSV::class.java)
 
@@ -24,7 +24,7 @@ class CSV {
     private val maxActivityDesc = "the maximum activity value observed"
     private val activityAt010uMDesc = "The average measured activity of all accepted replicates at the specified concentration"
     private val activityAt019uMDesc = activityAt010uMDesc
-    private val activityAt038uMDesc = activityAt010uMDesc
+    private val activityAt038uMDesc = activityAt010uMDesc // probly change to activityAtDesc: one property
     private val activityAt075uMDesc = activityAt010uMDesc
     private val activityAt080uMDesc = activityAt010uMDesc
     private val activityAt150uMDesc = activityAt010uMDesc
@@ -41,7 +41,7 @@ class CSV {
     private val numPointsUnit = "NONE"
     private val maxActivityUnit = "PERCENT"
     private val activityAt010uMUnit = "PERCENT"
-    private val activityAt019uMUnit = activityAt010uMUnit
+    private val activityAt019uMUnit = activityAt010uMUnit //one property: activityAtUnit
     private val activityAt038uMUnit = activityAt010uMUnit
     private val activityAt075uMUnit = activityAt010uMUnit
     private val activityAt080uMUnit = activityAt010uMUnit
@@ -51,7 +51,7 @@ class CSV {
     private val activityAt600uMUnit = activityAt010uMUnit
     private val activityAt1200uMUnit = activityAt010uMUnit
 
-    fun readData(csvText: String): DataObject {
+    fun readData(csvPage: String): DataObject {
         class CSVClass {
             var pubchemResultTag: String? = null
             var pubchemSid: String? = null
@@ -80,10 +80,10 @@ class CSV {
             var activityAt1200uM: String? = null
         }
 
-        val br = File(Paths.get("tempFileCSV.csv").toString()).bufferedReader()
-        val csvPage = br.use { it.readText() }
+        //val br = File(Paths.get("tempFileCSV.csv").toString()).bufferedReader()
+        //val csvPage = br.use { it.readText() }
         val dataObject = DataObject()
-        val tempFile = Files.write(Paths.get("tempFileCSV.csv"), csvPage.toByteArray()) // Will be csvText Parameter
+        val tempFile = Files.write(Paths.get("tempFileCSV.csv"), csvPage.toByteArray(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING) // Will be csvText Parameter
         CSVObjectIterator(tempFile, CSVClass::class.java).use { iterator ->
             iterator.forEach {
                 println(it.pubchemResultTag)
@@ -94,7 +94,7 @@ class CSV {
                 println(it.pubchemActivityUrl)
                 println(it.pubchemAssaydataComment)
                 val json = JSONObject().apply { put("property", "EC50 Qulaifier"); put("Value", it.ec50Qualifier); put("description", ec50QualifierDesc); put("unit", ec50QualifierUnit)
-                    put("EC50", it.ec50);
+                    put("EC50", it.ec50)
                     put("property", "EC50 Standard Error"); put("Value", it.ec50StandardError); put("description", ec50StandardErrorDesc); put("unit", ec50Unit)
                     put("property", "s0"); put("Value", it.s0); put("description", s0Desc); put("unit", s0Unit)
                     put("property", "sInf"); put("Value", it.sInf); put("description", sInfDesc); put("unit", sInfUnit)

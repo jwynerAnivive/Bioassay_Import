@@ -1,12 +1,13 @@
 package com.anivive.process
 
+import com.anivive.Model.Assay
+import com.anivive.Model.DataObject
 import com.anivive.Neo.Insert
 import com.anivive.util.*
 import io.netty.handler.logging.LogLevel
 import org.apache.commons.io.IOUtils
 import org.apache.log4j.Logger
-import java.io.File
-import java.io.InputStream
+import java.io.*
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
@@ -24,34 +25,118 @@ import java.util.zip.ZipInputStream
 
 object Download {
     private val logger = Logger.getLogger(Download::class.java)
-    private val folder = "/pubchem/Bioassay/CSV/Data/" //"/Users/jwyner/Applications/Programs/ftpFiles/0001001_0002000"
-    private val pattern = Pattern.compile("(?:US)([^-]*)-(\\d{4})[^.]*\\.")
-    private val toExtractFilePattern = Pattern.compile("US[^-]*-(\\d{4})(\\d{2})(\\d{2})[.-][\\d\\w.]+")
-    private val unzipToFolder = Paths.get(folder)
-    private const val DOWNLOAD_PATH = "/Users/jwyner/Desktop"//Applications/Programs/ftpFiles/"//"/Users/jwyner/Documents/ftpFiles"
-    private const val EXTRACTED_PATH = "/Applications/Programs/ftpFiles2/Extracted"
+    private val dataFolder = "/pubchem/Bioassay/CSV/Data/"
+    private val descriptionFolder = "/pubchem/Bioassay/CSV/Description/"
+    private const val DOWNLOAD_PATH_Data = "example/DownloadedCsv"
+    private const val DOWNLOAD_PATH_Description = "example/DownloadedXml"
+    private const val UNZIP_PATH_Data = "example/UnzippedFilesCsv"
+    private const val UNZIP_PATH_Description = "example/UnzippedFilesXml"
+    private const val EXTRACTED_PATH_Data = "example/CsvFiles"
+    private const val EXTRACTED_PATH_Description = "example/XmlFiles"
     private const val FTP_EMAIL = "jwyner@anivive.com"
     private val spaceDelimiter = Regex("\\s+")
 
-    fun getUrls(type: String) {
+    fun downloadAndUnzipFiles(category: String) {//}, fileList: List<String>) {
+        val folderName = "/pubchem/Bioassay/CSV/$category/"
+        FTPAniClient("ftp.ncbi.nlm.nih.gov", "anonymous", FTP_EMAIL).use { client ->
+            client.listFiles(folderName).filter { it.name.endsWith(".zip") }.forEach { file ->
+                //if (file.name in fileList) { // for filtering out files that have not been updated since last insert
+                val typePath = if (category == "Data") DOWNLOAD_PATH_Data else DOWNLOAD_PATH_Description
+                val unzipPath = if (category == "Data") UNZIP_PATH_Data else UNZIP_PATH_Description
+                    val downloadPath = Paths.get(typePath, file.name)// may need to take .descr out of description files
+                    client.downloadFile("$folderName${file.name}", downloadPath) // downloading files from FTP server to local folder
+                    val fileName = file.name.substringBefore(".zip")
+                    println("file downloaded")
+                    DownloadUtil.extractFiles("$unzipPath/", downloadPath)
+                    println("file unzipped")
+                //}
+            }
+        }
+    }
+
+    fun extractContent(filenames: List<String>, category: String) {
+        val unzipPath = if (category == "Data") UNZIP_PATH_Data else UNZIP_PATH_Description
+        val extractPath = if (category == "Data") EXTRACTED_PATH_Data else EXTRACTED_PATH_Description
+        filenames.forEach { filename ->
+            val directory = "$unzipPath/$filename/$filename" //not sure why, but when extracted, there are two nested folders of the filename
+            if (Files.notExists(Paths.get(directory)))
+                File(directory).mkdir()
+            val dir = File(directory)
+            val directoryListing = dir.listFiles()
+            directoryListing?.forEachIndexed { i, it ->
+                println("count: $i")
+                println(it.name)
+                val csvDirectory = "$extractPath/$filename"
+                if (Files.notExists(Paths.get(csvDirectory)))
+                    File(csvDirectory).mkdirs()
+                DownloadUtil.extractGz(Paths.get("$directory/${it.name}"), Paths.get("$csvDirectory/${it.name.substringBefore(".gz")}/"))
+            }
+        }
+    }
+
+    fun sendToProcess() {
+        val descriptionObjects = mutableListOf<Assay>()
+        val dataObjects = HashMap<Int, List<DataObject>>()
+
+        fun helper(type: String) {
+            val path = if (type == "Data") EXTRACTED_PATH_Data else EXTRACTED_PATH_Description
+            if (Files.notExists(Paths.get(path)))
+                File(path).mkdir()
+            val dir = File(path)
+            val directory = dir.listFiles()
+            directory?.forEach {
+                if (it.name != ".DS_Store") { // might not be an issue in prod?
+                    val fullPath = "$path/${it.name}"
+                    val nextDir = File(fullPath)
+                    val files = nextDir.listFiles()
+                    files.forEach { file ->
+                        val br = File(Paths.get("$fullPath/${file.name}").toString()).bufferedReader()
+                        val page = br.use { it.readText() }
+                        println(file.name)
+                        // sets a hashmap with the aid as the key so it can be matched up with the proper description file
+                        if (type == "Data") dataObjects.apply { put(file.name.substringBefore(".csv").toInt(), Parse.readData(page, file.name.substringBefore(".csv"))) }
+                        else descriptionObjects.add(Parse.readDescription(page))
+                    }
+                }
+            }
+        }
+
+        helper("Description")
+        helper("Data")
+
+        descriptionObjects.forEach { assay ->
+            assay.compounds = dataObjects[assay.id]
+            Insert.insert(assay)
+        }
+
+        println("processed")
+
+    }
+
+    fun getUrls(type: String): List<String> {
         val urlList = mutableListOf<String>()
         val doc = WebUtil.get("ftp://ftp.ncbi.nlm.nih.gov/pubchem/Bioassay/CSV/$type/")
         val split = doc.split("\n") // line containing data for each file
         split.forEach { line ->
-            val info = line.split(spaceDelimiter)
-            val date = dateProcess(info)
-            val url = info[8].substringBefore(".zip")
-            if (Insert.checkDate(url, date)) {
-                urlList.add(url)
+            if (line.isNotNullOrBlank()) {
+                val info = line.split(spaceDelimiter)
+                val date = dateProcess(info)
+                val url = info[8].substringBefore(".zip")
+                if (Insert.checkDate(url, date)) {
+                    urlList.add(url)
+                }
             }
         }
-        println(doc)
+        Insert.closeGateway()
+        return urlList
     }
 
     fun dateProcess(info: List<String>): Long {
+        if (info.size < 7) println("SIZE ERROR: $info")
         val month = monthSet[info[5].toLowerCase()] ?: "01"
         val day = if (info[6].length == 1) "0${info[6]}" else info[6]
-        val year = info[7]
+        var year = info[7]
+        if (year.contains(":")) year = "2018"
         return ("$year$month$day").toMillis()
     }
 
@@ -60,70 +145,6 @@ object Download {
         put("apr", "04"); put("may", "05"); put("jun", "06"); put("jul", "07")
         put("aug", "08"); put("sep", "09"); put("oct", "10")
         put("nov", "11"); put("dec", "12")
-    }
-
-    fun download(urlPath: String): List<Collection<Path>> {
-        //val url = URL(urlPath)
-        val file: Path = unzipToFolder.resolve(DownloadUtil.getFileName(urlPath))
-        val results = HashSet<Path>().map { extractZip(file) }
-        return results
-    }
-
-    fun downloadFiles(folderName: String, endPath: String) {
-        FTPAniClient("ftp.ncbi.nlm.nih.gov", "anonymous", FTP_EMAIL).use { client ->
-            client.listFiles(folderName).filter { it.name.endsWith(".zip") }.forEach { it ->
-                val downloadPath = Paths.get(DOWNLOAD_PATH, it.name)
-                //tryRepeat(3) {
-                    println("inside repeat")
-                    client.downloadFile("$folderName${it.name}", downloadPath)
-                    //DownloadUtil.extractGz(downloadPath, Paths.get(EXTRACTED_PATH, it.name.substringBefore(".zip")))
-                    val e = extractZip2(Paths.get(folderName), Paths.get(endPath))
-                println()
-                //}
-            }
-        }
-    }
-
-    fun download2() {
-        ZipFile(folder).use { zip ->
-            zip.entries().asSequence().forEach { entry ->
-                zip.getInputStream(entry).use { input ->
-                    File(entry.name).outputStream().use { output ->
-                        input.copyTo(output)
-                    }
-                }
-            }
-        }
-    }
-
-    @JvmStatic
-    fun extractZip2(from: Path, to: Path) {
-        val buffer = ByteArray(1024)
-        ZipInputStream(Files.newInputStream(from)).use { inStream ->
-            Files.newOutputStream(to).use { outStream ->
-                var len = inStream.read(buffer)
-                while (len > 0) {
-                    outStream.write(buffer, 0, len)
-                    len = inStream.read(buffer)
-                }
-            }
-        }
-        logger.info("Extracted $from")
-    }
-
-    fun extractZip(file: Path): Collection<Path> {
-        val resultSet = HashSet<Path>()
-        ZipInputStream(Files.newInputStream(file)).use { zipInputStream ->
-            var zipEntry: ZipEntry? = null
-            while ({ zipEntry = zipInputStream.nextEntry; zipEntry }() != null) { //Code for extracting each thing in zip file
-                logger.debug("Zip entry name: ${zipEntry!!.name}")
-                //if (!zipEntry!!.isDirectory && weCareAbout(zipEntry!!.name)) {
-                    //resultSet.addAll(extractFiles(zipEntry!!.name, zipInputStream))
-                DownloadUtil.extractFile(zipInputStream, Paths.get("/Users/jwyner/Applications/Programs/ftpFiles/"))
-                //}
-            }
-        }
-        return resultSet
     }
 
     private val dtf = DateTimeFormatterBuilder().appendPattern("yyyyMMdd").parseDefaulting(ChronoField.SECOND_OF_DAY, 0).toFormatter()

@@ -14,10 +14,15 @@ object Insert {
     private val gateway = NeoGatewayBoltImpl(StandardProperty.NEO_SERVER.value!!, StandardProperty.NEO_USER.value!!, StandardProperty.NEO_PASSWORD.value!!)
     private val builder = gateway.builder()
 
-    // will check filename property on BIOASSAY UpdatedAt Node and check if the date passed in is after the stored date
+    /**
+     * will check filename property on BIOASSAY UpdatedAt Node and check if the date passed in is after the stored date
+     * setting properties with preceeding 'f' because neo properties cannot start with a number
+    */
     fun checkDate(filename: String, date: Long): Boolean {
-        val result = gateway.executeQuery(builder.manualQuery("MATCH (u:UpdatedAt{match_name: 'BIOASSAY'}) RETURN u.$filename").build())
-        val previous = if (result.hasNext()) result.peek()[0].toString().replace("\"", "") else "0"
+        builder.clear()
+        val result = gateway.executeQuery(builder.manualQuery("MATCH (u:UpdatedAt{match_name: 'BIOASSAY'}) RETURN u.f$filename").build())
+        var previous = if (result.hasNext()) result.peek()[0].toString().replace("\"", "") else "0"
+        if (previous == "NULL") previous = "0"
         return date > previous.toLong()
     }
 

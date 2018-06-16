@@ -1,5 +1,6 @@
 package com.anivive.kafka
 
+import com.anivive.process.Download
 import com.anivive.util.KafkaConsumerHelper
 import com.anivive.util.KafkaProducerHelper
 import com.anivive.util.StandardProperty
@@ -35,11 +36,8 @@ class Queue {
 
     fun getLinks() {
         KafkaProducerHelper(props, linkTopic).use { producer ->
-            /*
-                Download.getUrls().forEach {
-                    producer.send(it)
-                }
-             */
+            Download.getUrls("Data").forEach { producer.send(it) }
+            Download.getUrls("Description").forEach { producer.send(it) }
         }
     }
 

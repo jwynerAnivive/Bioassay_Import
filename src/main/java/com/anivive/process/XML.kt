@@ -3,48 +3,15 @@ package com.anivive.process
 import com.anivive.Model.Assay
 import com.anivive.Model.PCAssayDescription
 import com.anivive.util.xml.XMLIterator2
-import com.anivive.util.xml.KotlinBuilder
 import org.apache.log4j.Logger
 import java.io.PrintWriter
 import java.nio.file.Files
 import java.nio.file.Paths
 import java.nio.file.StandardOpenOption
 
-class XML {
-    //Logger please engage
+object XML {
+
     private val logger = Logger.getLogger(XML::class.java)
-
-    //Just a small sample of what one can expect from a typical archetype-resources.src.main.kotlin.com.anivive.XML file
-    //This data is very, very true to life. Treat carefully.
-    companion object {
-        const val exampleXML = ""
-    }
-
-    fun generateModel() {
-        //Let's write it into an actual xml file
-        val tempFile = Files.write(Paths.get("tempFileXML"), exampleXML.toByteArray(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)
-        //This brings the xml structure into some static variables
-        KotlinBuilder(tempFile).buildStructure("ExampleStructure")
-        //This gets a string representing the kotlin code, as shown below
-        val fileText = KotlinBuilder.buildFile("packageName")
-        //This is how we write that kotlin code into a file
-        val tempFile1 = Files.write(Paths.get("tempFileKotlin.kt"), fileText.toByteArray(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)
-        val tempFile2 = Paths.get("exampleValues.txt")
-        //This gives us a list of the variables we found, along with some examples of their values
-        KotlinBuilder.writeTypesWithValuesAndFiles(tempFile2)
-        //Clean up is important
-        Files.delete(tempFile)
-        Files.deleteIfExists(tempFile1)
-        Files.delete(tempFile2)
-    }
-
-    fun nasXmlInsert(xmlList: List<String>, pmid: String) {
-        xmlList.forEach { it ->
-            val printWriter: PrintWriter = PrintWriter("/Users/jwyner/Desktop/Anivive/ShareDriveMount/pubmed_xmlFiles/file$pmid.XML")
-            printWriter.print(it)
-            printWriter.close()
-        }
-    }
 
     fun readDescription(xmlPage: String) {
         val tempFile = Files.write(Paths.get("tempDescription"), xmlPage.toByteArray(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)
@@ -54,26 +21,35 @@ class XML {
             val descriptionE = it.pCAssayDescriptionDescription?.pCAssayDescriptionDescriptionE?.fold("") { a, b -> "$a,$b" }
             val commentE = it.pCAssayDescriptionComment?.pCAssayDescriptionCommentE
             val burl = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
-                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataDburl!! }
+                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataDburl }
             val pmid = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
-                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataPmid!!.toInt() }
+                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataPmid?.toInt() }
             val xAid = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
-                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataAid!!.toInt() }
+                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataAid?.toInt() }
             val protein = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
-                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataProteinGi!!.toInt() }
+                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataProteinGi?.toInt() }
             val taxonomy = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
-                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataTaxonomy!!.toInt() }
+                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataTaxonomy?.toInt() }
             val mmdb = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
-                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataMmdbId!!.toInt() }
+                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataMmdbId?.toInt() }
             val gene = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
-                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataGene!!.toInt() }
+                it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataGene?.toInt() }
             val protocol = it.PCAssayDescriptionProtocol?.pcAssayDescriptionProtocolE
             val trackingName = it.pCAssayDescriptionAidSource?.pCSource?.pCSourceDb?.pCDBTracking?.pCDBTrackingName
             val sourceId = it.pCAssayDescriptionAidSource?.pCSource?.pCSourceDb?.pCDBTracking?.pCDBTrackingSourceId?.objectId?.objectIdStr
-            val version = it.pCAssayDescriptionAid?.pCID?.pCIDVersion!!.toInt()
+            val version = it.pCAssayDescriptionAid?.pCID?.pCIDVersion?.toInt()
             val outcome = it.pCAssayDescriptionDescription?.pcAssayDescriptionActivityOutcomeMethod
             val assay: Assay = Assay(id = id, name = name, descriptionE = descriptionE, commentE = commentE, burl = burl, pmid = pmid, xAid = xAid, protein = protein,
                     taxonomy = taxonomy, mmdb = mmdb, gene = gene, protocol = protocol, trackingName = trackingName, idStr = sourceId, version = version, outcome = outcome)
+            println(assay)
+        }
+    }
+
+    fun nasXmlInsert(xmlList: List<String>, pmid: String) {
+        xmlList.forEach { it ->
+            val printWriter: PrintWriter = PrintWriter("/Users/jwyner/Desktop/Anivive/ShareDriveMount/pubmed_xmlFiles/file$pmid.XML")
+            printWriter.print(it)
+            printWriter.close()
         }
     }
 
@@ -103,37 +79,4 @@ class XML {
         var item0: String? = null
         var item1: String? = null
     }
-
-
-    //Generated model:
-    /*
-        @file:Suppress("unused")
-
-        package packageName
-
-        class ExampleStructure {
-            var topLevel: archetype-resources.src.main.kotlin.com.anivive.TopLevel? = null
-        }
-
-        class archetype-resources.src.main.kotlin.com.anivive.TopLevel {
-            var midLevel: List<archetype-resources.src.main.kotlin.com.anivive.MidLevel>? = null
-        }
-
-        class archetype-resources.src.main.kotlin.com.anivive.MidLevel {
-            var item0: String? = null
-            var item1: String? = null
-        }
-     */
-
-    //Types with values:
-    /*
-        mid-level.item0
-            tempFileXML
-                Yoooo
-                Words and all
-        mid-level.item1
-            tempFileXML
-                Can you believe all the words here?
-                Another item has arriiiived
-     */
 }
