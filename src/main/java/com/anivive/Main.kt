@@ -1,14 +1,13 @@
 package com.anivive
 
+import com.anivive.Neo.Insert
+import com.anivive.kafka.Queue
 import com.anivive.process.Download
-import com.anivive.util.WebUtil
 import com.anivive.util.initConfig
 import com.anivive.util.initLog4J
-import org.apache.commons.net.ftp.FTPClient
+import org.apache.commons.io.FileUtils
 import org.apache.log4j.Logger
-import java.io.FileOutputStream
-import java.io.IOException
-import java.io.OutputStream
+import java.io.File
 
 object Main {
     private val logger = Logger.getLogger(Main::class.java)
@@ -20,28 +19,30 @@ object Main {
 
     @JvmStatic
     fun main(args: Array<String>) {
-
-        /*val filename = "pubchem/Bioassay/CSV/Data/0001001_0002000.zip"
-        val client = FTPClient()
-        val os: OutputStream = FileOutputStream(filename)
         try {
-            client.connect("ftp.ncbi.nlm.nih.gov")
-            client.login("jwyner@anivive.com", "password")
-
-            val status = client.retrieveFile(filename, os)
-            println("status: $status")
-            println("reply: ${client.reply}")
-        } catch (e: IOException) {
-            e.printStackTrace()
-        } finally {
-            try {
-                client.disconnect()
-            } catch (e: IOException) {
-                e.printStackTrace()
+            if ("get_file_info" in args) {
+                Queue.storeFiles()
             }
-        }*/
-        //Download.downloadFiles("/pubchem/Bioassay/CSV/Data/", "/Users/jwyner/Applications/Programs/ftpFiles/0000001_0001000")//, "0000001_0001000.zip")
-        //Download.downloadFiles("/Users/jwyner/Desktop/0020001_0021000.zip")
-        Download.getUrls("Data")
+            if ("download_unzip" in args) {
+                Queue.pullFiles()
+            }
+            if ("extract" in args) {
+                Download.extractContent("Description")
+                Download.extractContent("Data")
+            }
+            if ("insert" in args) {
+                Download.sendToProcess()
+            }
+            if ("update" in args) {
+                Queue.pullDates()
+            }
+            if ("delete" in args) {
+                FileUtils.deleteDirectory(File("storage"))
+            }
+        } catch (e: Exception) {
+            logger.error("Error running program with arguments ${args.reduce { a, b -> "$a $b" }}", e)
+        } finally {
+            Insert.closeGateway()
+        }
     }
 }

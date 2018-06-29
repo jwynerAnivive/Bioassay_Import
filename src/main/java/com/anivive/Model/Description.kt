@@ -12,7 +12,7 @@ class PCAssayDescription {
     var pCAssayDescriptionResults: PCAssayDescriptionResults? = null
     var pCAssayDescriptionRevision: String? = null
     var pCAssayDescriptionProjectCategory: PCAssayDescriptionProjectCategory? = null
-    var PCAssayDescriptionProtocol: PCAssayDescriptionProtocol? = null
+    var pCAssayDescriptionProtocol: PCAssayDescriptionProtocol? = null
     var pCAssayDescriptionAssayGroup: PCAssayDescriptionAssayGroup? = null
     var pCAssayDescriptionCategorizedComment: PCAssayDescriptionCategorizedComment? = null
     var xmlns: String? = null

@@ -1,5 +1,7 @@
 package com.anivive.kafka
 
+import com.anivive.Neo.Insert
+import com.anivive.process.Download
 import com.anivive.util.KafkaConsumerHelper
 import com.anivive.util.KafkaProducerHelper
 import com.anivive.util.StandardProperty
@@ -11,13 +13,8 @@ import org.apache.kafka.common.serialization.LongDeserializer
 import org.apache.kafka.common.serialization.StringDeserializer
 import java.util.*
 
-class Queue {
-    //We need properties for our connection to archetype-resources.src.main.kotlin.com.anivive.Kafka
-    //We like them to be lazy in case we want to test our kafka class without all test values in place
-    //Then we can mock our kafka connection and perhaps avoid nasty null pointers on KAFKA_SERVERS + KAFKA_POLL_SIZE
-    //KAFKA_SERVERS should look like so: kafka-0.broker.kafka.svc.cluster.local:9092,kafka-1.broker.kafka.svc.cluster.local:9092,
-    // kafka-2.broker.kafka.svc.cluster.local:9092
-    //KAFKA_POLL_SIZE can be 1 or 10 or 100, probably just test out different values.
+object Queue {
+
     private val props by lazy {
         Properties().apply {
             put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, StandardProperty.KAFKA_SERVERS.value)
@@ -29,28 +26,51 @@ class Queue {
         }
     }
 
-    private val logger = Logger.getLogger(Kafka::class.java)
-    private val linkTopic = StringProperty("LinkTopic").value!!
+    private val logger = Logger.getLogger(Queue::class.java)
+    private val fileTopic = StringProperty("FileTopic").value!!
+    private val dateTopic = StringProperty("DateTopic").value!!
     private val groupId = StringProperty("GroupId").value!!
 
-    fun getLinks() {
-        KafkaProducerHelper(props, linkTopic).use { producer ->
-            /*
+    /**
+     * Stores the names of files to be updated in one queue, and the files with their dates to be updated in another
+     */
+
+    fun storeFiles() {
+        KafkaProducerHelper(props, dateTopic).use { dateProducer ->
+            KafkaProducerHelper(props, fileTopic).use { fileProducer ->
                 Download.getUrls().forEach {
-                    producer.send(it)
+                    fileProducer.send(it.key)
+                    dateProducer.send("${it.key}*${it.value}") // filename is used as node property, date is value
                 }
-             */
+                logger.info("files and dates inserted to queue")
+            }
         }
     }
 
-    fun pullLinks() {
-        KafkaConsumerHelper(props, groupId, linkTopic).use { consumer ->
-            consumer.consume { item ->
-                /*
-                Download.downloadFTP(item)
-                */
-                logger.info("$item downloaded")
-            }
+    /**
+     * pulls the filenames out of the queue, then downloads, unzips, and stores them
+     */
+
+    fun pullFiles() {
+        val consumer = KafkaConsumerHelper(props, groupId, fileTopic) { files ->
+            logger.info("collection of files pulled")
+            Download.downloadAndUnzipFiles("Description", files.toList())
+            Download.downloadAndUnzipFiles("Data", files.toList())
         }
+        consumer.start()
+        consumer.close()
+    }
+
+    /**
+     * After processing is done, dates are pulled and the UpdatedAt node is updated with current dates
+     */
+
+    fun pullDates() {
+        val consumer = KafkaConsumerHelper(props, groupId, dateTopic) { dates ->
+            logger.info("collection of dates pulled")
+            Insert.updateDate(dates.toList())
+        }
+        consumer.start()
+        consumer.close()
     }
 }
