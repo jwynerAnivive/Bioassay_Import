@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: bioassay-import-update
+  namespace: imports
+  labels:
+    app: bioassay-import
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: bioassay-import-update
+    spec:
+      containers:
+      - name: bioassay-import-update
+        image: us.gcr.io/aniselect-176223/bioassay-import:latest-master
+        resources:
+          requests:
+            memory: "10G"
+          limits:
+            memory: "12G"
+        imagePullPolicy: Always
+        command: ["java","-Xmx10g","-Xms10g", "-jar", "app.jar","update"]
+        volumeMounts:
+        - name: nfs
+          mountPath: /code/data
+        - name: save-file
+          mountPath: /saveFile
+        envFrom:
+        - configMapRef:
+           name: bioassay-import
+      restartPolicy: Never
+      imagePullSecrets:
+      - name: anivive-google
+      volumes:
+      - name: nfs
+        persistentVolumeClaim:
+          claimName: nas-mount-imports
+      - name: save-file
+        persistentVolumeClaim:
+          claimName: pod-save-files-imports

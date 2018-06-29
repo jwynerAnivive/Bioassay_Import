@@ -1,14 +1,10 @@
 package com.anivive.process
 
 import com.anivive.Model.Assay
-import com.anivive.Model.DataObject
+import com.anivive.Model.Compound
 import com.anivive.Model.PCAssayDescription
 import com.anivive.util.*
 import com.anivive.util.xml.XMLIterator2
-import com.univocity.parsers.common.processor.ColumnProcessor
-import com.univocity.parsers.csv.CsvParser
-import com.univocity.parsers.csv.CsvParserSettings
-import org.apache.log4j.Logger
 import org.json.JSONObject
 import java.nio.file.Files
 import java.nio.file.Paths
@@ -16,201 +12,106 @@ import java.nio.file.StandardOpenOption
 
 object Parse {
 
-    private val logger = Logger.getLogger(Parse::class.java)
-
-    private val ec50QualifierDesc = "\'>\', \'=\',  or \'<\'"
-    private val ec50Desc = "the concentration whereupon perceived activity reaches 50% of the maximum"
-    private val ec50StandardErrorDesc = "the standard error for the calculated EC50 value"
-    private val s0Desc = "the fitted activity level at zero concentration"
-    private val sInfDesc = "the fitted activity level at infinite concentration"
-    private val hillSlopeDesc = "the slope at EC50"
-    private val numPointsDesc = "the number of data points included in the plot"
-    private val maxActivityDesc = "the maximum activity value observed"
-    private val activityAtDesc = "The average measured activity of all accepted replicates at the specified concentration"
-    private var ec50QualifierUnit = ""
-    private val ec50Unit = "MICROMOLAR"
-    private val ec50StandardErrorUnit = "MICROMOLAR"
-    private val s0Unit = "PERCENT"
-    private val sInfUnit = "PERCENT"
-    private val hillSlopeUnit = "NONE"
-    private val numPointsUnit = "NONE"
-    private val maxActivityUnit = "PERCENT"
-    private val activityAtUnit = "PERCENT"
+    /**
+     * In the description folders are the XML files that contain the data to put on the assay nodes
+     */
 
     fun readDescription(xmlPage: String): Assay {
         val tempFile = Files.write(Paths.get("tempDescription"), xmlPage.toByteArray(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)
         XMLIterator2(tempFile, PCAssayDescription::class.java).forEach {
             val id = it.pCAssayDescriptionAid!!.pCID!!.pCIDId!!.toInt()
             val name = it.pCAssayDescriptionName
-            val descriptionE = it.pCAssayDescriptionDescription?.pCAssayDescriptionDescriptionE?.fold("") { a, b -> "$a,$b" }
+            val descriptionE = it.pCAssayDescriptionDescription?.pCAssayDescriptionDescriptionE?.fold("") { a, b -> "$a,$b" } // often comes as array, we just want a string
             val commentE = it.pCAssayDescriptionComment?.pCAssayDescriptionCommentE
-            val burl = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
+            val burl = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.mapNotNull {
                 it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataDburl }
-            val pmid = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
+            val pmid = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.mapNotNull {
                 it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataPmid }
-            val xAid = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
+            val xAid = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.mapNotNull {
                 it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataAid }
-            val protein = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
+            val protein = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.mapNotNull {
                 it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataProteinGi }
-            val taxonomy = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
+            val taxonomy = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.mapNotNull {
                 it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataTaxonomy }
-            val mmdb = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
+            val mmdb = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.mapNotNull {
                 it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataMmdbId }
-            val gene = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.map {
+            val gene = it.pCAssayDescriptionXref?.pCAnnotatedXRef?.mapNotNull {
                 it.pCAnnotatedXRefXref?.pCXRefData?.pCXRefDataGene }
-            val protocol = it.PCAssayDescriptionProtocol?.pcAssayDescriptionProtocolE
+            val protocol = it.pCAssayDescriptionProtocol?.pcAssayDescriptionProtocolE
             val trackingName = it.pCAssayDescriptionAidSource?.pCSource?.pCSourceDb?.pCDBTracking?.pCDBTrackingName
             val sourceId = it.pCAssayDescriptionAidSource?.pCSource?.pCSourceDb?.pCDBTracking?.pCDBTrackingSourceId?.objectId?.objectIdStr
             val version = it.pCAssayDescriptionAid?.pCID?.pCIDVersion?.toInt()
             val outcome = it.pCAssayDescriptionDescription?.pcAssayDescriptionActivityOutcomeMethod
-            return Assay(id = id, name = name, descriptionE = descriptionE, commentE = commentE, burl = burl?.filterNot { it.isNullOrBlank() }, pmid = pmid?.filter { it.isAllDigits() }?.map { it?.toInt() }, xAid = xAid?.filter { it.isAllDigits() }?.map { it?.toInt() }, protein = protein?.filter { it.isAllDigits() }?.map { it?.toInt() },
-                    taxonomy = taxonomy?.filter { it.isAllDigits() }?.map { it?.toInt() }, mmdb = mmdb?.filter { it.isAllDigits() }?.map { it?.toInt() }, gene = gene?.filter { it.isAllDigits() }?.map { it?.toInt() }, protocol = protocol, trackingName = trackingName, idStr = sourceId, version = version, outcome = outcome)
+            Files.delete(tempFile)
+            //Creating the assay the assay object that will eventually be inserted
+            return Assay(id = id, name = name, descriptionE = descriptionE, commentE = commentE, burl = burl?.filterNot { it.isNullOrBlank() }.takeUnless { it!!.isEmpty() }, pmid = pmid?.filter { it.isAllDigits() }?.map { it.toInt() }.takeUnless { it!!.isEmpty() },
+                    xAid = xAid?.map { it.toInt() }.takeUnless { it!!.isEmpty() }, protein = protein?.map { it.toInt() }.takeUnless { it!!.isEmpty() },
+                    taxonomy = taxonomy?.map { it.toInt() }.takeUnless { it!!.isEmpty() }, mmdb = mmdb?.map { it.toInt() }.takeUnless { it!!.isEmpty() },
+                    gene = gene?.map { it.toInt() }.takeUnless { it!!.isEmpty() }, protocol = protocol, trackingName = trackingName, idStr = sourceId, version = version, outcome = outcome)
         }
+        Files.delete(tempFile)
         return Assay()
     }
 
-    fun readData(csvPage: String, aid: String): List<DataObject> {
-        class CSVClass {
-            var pubchemResultTag: String? = null
-            var pubchemSid: String? = null
-            var pubchemCid: String? = null
-            var pubchemActivityOutcome: String? = null
-            var pubchemActivityScore: String? = null
-            var pubchemActivityUrl: String? = null
-            var pubchemAssaydataComment: String? = null
-            var ec50Qualifier: String? = null
-            var ec50StandardError: String? = null
-            var ec50: String? = null
-            var s0: String? = null
-            var sInf: String? = null
-            var hillSlope: String? = null
-            var numPoints: String? = null
-            var maxActivity: String? = null
-            var activityAt010uM: String? = null
-            var activityAt019uM: String? = null
-            var activityAt038uM: String? = null
-            var activityAt075uM: String? = null
-            var activityAt080uM: String? = null
-            var activityAt150uM: String? = null
-            var activityAt160uM: String? = null
-            var activityAt300uM: String? = null
-            var activityAt600uM: String? = null
-            var activityAt1200uM: String? = null
-        }
+    /**
+     * Reading the csv files that contain the data about all of the compounds that the assay is related to
+     * The CID is the compound id that we are connecting to the assay
+     * Columns containing the outcome , activity, url, and comment will be stored as a property on the edge
+     * Every column outside of the 'notExtras' set will put put in a JSON object and stored as an array of objects on the edge
+     * JSONObjects contain the name of the property(column header), the description of the property, the units it is measured in, and the value
+     * All descriptions are listed in one of the first few rows before the compounds are listed, and are kept track of in their own hashmaps, to be referenced when each compound is processed
+     */
 
+    fun readData(csvPage: String): List<Compound> {
+        class CSVClass // declaring base class for objectIterator, even though we don't actually use it
 
-        val returnList = mutableListOf<DataObject>()
-        /*val extraObject = JSONObject()
-        val extraHeaders = mutableListOf<String>()
-        val extraTypes = mutableListOf<String>()
-        val extraDescr = mutableListOf<String>()
-        val extraUnits = mutableListOf<String>()*/
-
-        //figure out values for extra data
-        val firstRow = csvPage.substringBefore("\n")
-        val firstRowSplit = firstRow.split(",")
-        if (firstRowSplit.size > 400) { println("more than 400 columns"); return emptyList() }
-        /*var start = false
-        firstRowSplit.forEachIndexed { i, column ->
-            if (start) {
-                extraHeaders.add(column)
-                val e = 0
-                /*when (i) {
-                    0 -> extraHeaders.add(column)
-                    1 -> extraTypes.add(column)
-                    2 -> extraDescr.add(column)
-                    3 -> extraUnits.add(column)
-                }*/
-            }
-            if (column == "PUBCHEM_ASSAYDATA_COMMENT") start = true
-        }*/
-
-        //filter out punctuation and change capitalization to match CSVObjectIterator
-        /*val temps = extraHeaders.map {
-            val a = it.replace(Regex("\\p{P}"), "").replace(it[0], it[0].toLowerCase())
-            val chars = a.toMutableList()
-            val newChars = chars.mapIndexed { i, letter ->
-                if (i < chars.size - 1) {
-                    if (letter.isUpperCase()) {
-                        chars[i + 1] = chars[i + 1].toLowerCase()
-                    }
-                }
-                if (i > 0) {
-                    if (letter.isDigit()) {
-                        chars[i - 1] = chars[i - 1].toLowerCase()
-                    }
-                }
-            }
-            chars.fold("") { a, b-> "$a$b" }
-        }*/
-
-        //val splitPage = csvPage.split("\n")
-        /*splitPage.forEachIndexed { i, row ->
-            val splitRow = row.split(",")
-            var start = false
-            splitPage.forEach { column ->
-                if (column == "PUBCHEM_ASSAYDATA_COMMENT") start = true
-                if (start) {
-                    when (i) {
-                        0 -> extraHeaders.add(column)
-                        1 -> extraTypes.add(column)
-                        2 -> extraDescr.add(column)
-                        3 -> extraUnits.add(column)
-                    }
-                }
-            }
-            start = false
-        }*/
-        //val br = File(Paths.get("tempFileit.csv").toString()).bufferedReader()
-        //val csvPage = br.use { it.readText() }
-        val dataObject = DataObject()
+        val returnList = mutableListOf<Compound>()
         val tempFile = Files.write(Paths.get("tempFileCSV.csv"), csvPage.toByteArray(), StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING) // Will be csvText Parameter
-        CSVObjectIterator(tempFile, CSVClass::class.java).use { iterator ->
-            iterator.forEach {
-                //val row = JsonUtil.serialize(it)
-                /*println(it.pubchemResultTag)
-            println(it.pubchemSid)
-            println(it.pubchemCid)
-            println(it.pubchemActivityOutcome)
-            println(it.pubchemActivityScore)
-            println(it.pubchemActivityUrl)
-            println(it.pubchemAssaydataComment)*/
-                //val work = it.getFieldValues()
-                /*val json = JSONObject().apply { put("property", "EC50 Qualifier"); put("Value", it.ec50Qualifier); put("description", ec50QualifierDesc); put("unit", ec50QualifierUnit)
-                put("EC50", it.ec50)
-                put("property", "EC50 Standard Error"); put("Value", it.ec50StandardError); put("description", ec50StandardErrorDesc); put("unit", ec50StandardErrorUnit)
-                put("property", "s0"); put("Value", it.s0); put("description", s0Desc); put("unit", s0Unit)
-                put("property", "sInf"); put("Value", it.sInf); put("description", sInfDesc); put("unit", sInfUnit)
-                put("property", "Hill Slope"); put("Value", it.hillSlope); put("description", hillSlopeDesc); put("unit", hillSlopeUnit)
-                put("property", "Num. Points"); put("Value", it.numPoints); put("description", numPointsDesc); put("unit", numPointsUnit)
-                put("property", "Max. Activity"); put("Value", it.maxActivity); put("description", maxActivityDesc); put("unit", maxActivityUnit)
-                put("property", "Activity at 0.10uM"); put("Value", it.activityAt010uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "Activity at 0.19uM"); put("Value", it.activityAt019uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "Activity at 0.38uM"); put("Value", it.activityAt038uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "Activity at 0.75uM"); put("Value", it.activityAt075uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "Activity at 0.80uM"); put("Value", it.activityAt080uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "Activity at 1.50uM"); put("Value", it.activityAt150uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "Activity at 1.60uM"); put("Value", it.activityAt160uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "Activity at 300uM"); put("Value", it.activityAt300uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "Activity at 600uM"); put("Value", it.activityAt600uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "Activity at 1200uM"); put("Value", it.activityAt1200uM); put("description", activityAtDesc); put("unit", activityAtUnit)
-                put("property", "s0"); put("Value", it.s0); put("description", s0Desc); put("unit", s0Unit)
-                put("Activity at 0.75uM", it.activityAt075uM)
-                put("Activity at 0.80uM", it.activityAt080uM)
-                put("Activity at 1.50uM", it.activityAt150uM)
-                put("Activity at 1.60uM", it.activityAt160uM)
-                put("Activity at 300uM", it.activityAt300uM)
-                put("Activity at 600uM", it.activityAt600uM)
-                put("Activity at 1200uM", it.activityAt1200uM) }*/
-                val dataObj: DataObject = DataObject(cid = it.pubchemCid, outcome = it.pubchemActivityOutcome, score = it.pubchemActivityScore, url = it.pubchemActivityUrl,
-                        comment = it.pubchemAssaydataComment)
-                if (it.pubchemCid != null)
-                    returnList.add(dataObj)
-                //dataObject.outcome = it.pubchemActivityOutcome; dataObject.score = it.pubchemActivityScore
-                //dataObject.url = it.pubchemActivityUrl; dataObject.comment = it.pubchemAssaydataComment; dataObject.extra = json
+        CSVObjectIterator(tempFile, CSVClass::class.java, CSVUtil.defaultSettings().apply { maxColumns = 1000 }).use { iterator ->
+            val rowsToRead = setOf("RESULT_DESCR", "RESULT_UNIT")
+            val notExtras = setOf("PUBCHEM_RESULT_TAG", "PUBCHEM_SID", "PUBCHEM_CID", "PUBCHEM_ACTIVITY_OUTCOME", "PUBCHEM_ACTIVITY_SCORE", "PUBCHEM_ACTIVITY_URL", "PUBCHEM_ASSAYDATA_COMMENT")
+            val descriptions = HashMap<String, Any?>()
+            val units = HashMap<String, Any?>()
+            while (iterator.hasNext()) {
+                val dataObject = Compound()
+                val extras = mutableListOf<JSONObject>()
+                val row: MutableMap<String?, String?> = iterator.nextMap()!!
+                val rowLabel = row["PUBCHEM_RESULT_TAG"]
+                if (rowLabel in rowsToRead || rowLabel.isAllDigits()) {
+                    row.forEach { key, value ->
+                        val extraObject = JSONObject()
+                        if (rowLabel == "RESULT_DESCR" && key.isNotNullOrBlank() && key !in notExtras) {
+                            descriptions.apply { put(key!!, value) }
+                        }
+                        else if (rowLabel == "RESULT_UNIT" && key.isNotNullOrBlank()) {
+                            units.apply { put(key!!, value) }
+                        }
+                        else {
+                            if (value.isNotNullOrBlank()) {
+                                when {
+                                    key == "PUBCHEM_CID" -> dataObject.cid = value
+                                    key == "PUBCHEM_ACTIVITY_SCORE" -> dataObject.activity = value
+                                    key == "PUBCHEM_ACTIVITY_URL" -> dataObject.url = value
+                                    key == "PUBCHEM_ASSAYDATA_COMMENT" -> dataObject.comment = value
+                                    key == "PUBCHEM_ACTIVITY_OUTCOME" -> dataObject.outcome = value
+                                    key !in notExtras && !key.isNullOrEmptyString() -> extraObject.run {
+                                        put("property", key)
+                                        if (!descriptions[key].isNullOrEmptyString()) put("description", descriptions[key])
+                                        if (!units[key].isNullOrEmptyString()) put("unit", units[key])
+                                        put("value", value)
+                                    }
+                                }
+                            }
+                        }
+                        if (extraObject.length() != 0) extras.add(extraObject)
+                    }
+                }
+                if (dataObject.cid != null) {
+                    dataObject.extra = extras
+                    returnList.add(dataObject)
+                }
             }
         }
-
-        return returnList
+         return returnList
     }
 }
